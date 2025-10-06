@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced NIDS Web Interface</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 2em; background-color: #e9ecef; color: #333; }
+        h1 { color: #2c3e50; text-align: center; }
+        p { text-align: center; color: #7f8c8d; }
+        .container { max-width: 1200px; margin: auto; padding: 20px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: left; }
+        th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
+        tr:nth-child(even) { background-color: #f1f3f5; }
+        .alert-row { background-color: #ffebeb; cursor: pointer; }
+        .alert-row:hover { background-color: #ffcccc; }
+        .block-row { background-color: #e0f7fa; }
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 700px;
+            border-radius: 8px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close:hover, .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Network Intrusion Detection System</h1>
+        <p>Real-time monitoring for DDoS attacks and port scans. Click on an alert to view packet details.</p>
+        
+        <h2>Recent Alerts</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Source IP</th>
+                    <th>Timestamp</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody id="alert-table-body">
+            </tbody>
+        </table>
+
+        <h2>System Logs</h2>
+        <pre id="log-output" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; max-height: 400px; overflow-y: scroll;"></pre>
+    </div>
+
+    <div id="packetModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Packet Details</h2>
+            <p id="packetDetailsContent"></p>
+        </div>
+    </div>
+
+    <script>
+        const tableBody = document.getElementById('alert-table-body');
+        const logOutput = document.getElementById('log-output');
+        const modal = document.getElementById('packetModal');
+        const span = document.getElementsByClassName("close")[0];
+        const packetDetailsContent = document.getElementById('packetDetailsContent');
+
+        async function fetchAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const alerts = await response.json();
+                
+                tableBody.innerHTML = '';
+                if (alerts.length > 0) {
+                    alerts.forEach(alert => {
+                        const row = document.createElement('tr');
+                        row.classList.add(alert.type.includes('BLOCK') ? 'block-row' : 'alert-row');
+                        row.innerHTML = `
+                            <td>${alert.type}</td>
+                            <td>${alert.ip}</td>
+                            <td>${alert.timestamp}</td>
+                            <td>${alert.message}</td>
+                        `;
+                        // Make the row clickable, except for 'BLOCK' rows
+                        if (alert.type !== 'BLOCK') {
+                            row.addEventListener('click', () => showPacketDetails(alert.id));
+                        }
+                        tableBody.appendChild(row);
+                    });
+                } else {
+                    const noAlertsRow = document.createElement('tr');
+                    noAlertsRow.innerHTML = `<td colspan="4" style="text-align: center;">No alerts detected yet.</td>`;
+                    tableBody.appendChild(noAlertsRow);
+                }
+            } catch (error) {
+                console.error('Failed to fetch alerts:', error);
+            }
+        }
+
+        async function showPacketDetails(alertId) {
+            try {
+                const response = await fetch(`/api/packet/${alertId}`);
+                const data = await response.json();
+                if (data.summary) {
+                    packetDetailsContent.textContent = data.summary;
+                    modal.style.display = "block";
+                } else {
+                    alert("Packet details not available for this alert.");
+                }
+            } catch (error) {
+                console.error('Failed to fetch packet details:', error);
+                alert("An error occurred while fetching packet details.");
+            }
+        }
+
+        // Close the modal when the user clicks on <span> (x)
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+        // Close the modal when the user clicks anywhere outside of the modal
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const logs = await response.text();
+                logOutput.textContent = logs;
+                logOutput.scrollTop = logOutput.scrollHeight;
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+            }
+        }
+
+        fetchAlerts();
+        fetchLogs();
+        setInterval(fetchAlerts, 3000);
+        setInterval(fetchLogs, 5000);
+    </script>
+</body>
+</html>
